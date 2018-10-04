@@ -1,0 +1,76 @@
+import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+
+plugins {
+    id 'java'
+    id 'application'
+    id "org.jetbrains.gradle.plugin.idea-ext" version "0.4.2"
+    id 'com.bmuschko.docker-remote-api' version '3.6.2'
+}
+
+repositories {
+    jcenter()
+}
+
+idea {
+    project {
+        settings {
+            delegateActions {
+                delegateBuildRunToGradle = true // Delegate Run/Build to Gradle
+                testRunner = 'GRADLE'    // Test execution via gradle, not internal jUnit Runner
+            }
+        }
+    }
+}
+
+group 'com.virgingates.tools'
+version '1.0'
+
+task createDockerfile(type: Dockerfile) {
+    destFile = project.file('build/docker/Dockerfile')
+    from 'openjdk:8-jre-alpine'
+    label(["maintainer":"Ameer Gaafar <ameer.gaafar@virgingates.com>"])
+    copyFile jar.archiveName, '/app/'+jar.baseName+".jar"
+    entryPoint 'java','-jar', '/app/'+jar.baseName+".jar","--local-response-templating" 
+    workingDir "/app"
+    exposePort 8080
+}
+
+task buildImage(type: DockerBuildImage) {
+    dependsOn createDockerfile
+    inputDir = createDockerfile.destFile.parentFile
+    tag = "virgingates/"+jar.baseName.toLowerCase()+":"+jar.version
+}
+
+task syncJar(type: Sync) {
+    from jar.archivePath
+    into createDockerfile.destFile.parentFile
+}
+
+mainClassName = 'com.virgingates.tools.validatingwiremock.WireMockServerRunner'
+tasks.withType(Wrapper)  {
+    gradleVersion = "4.10.1"
+}
+
+
+
+jar {
+    manifest {
+        attributes 'Main-Class': mainClassName
+    }
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+
+dependencies {
+    compile group: 'com.github.tomakehurst', name: 'wiremock-standalone' , version :'2.19.0'
+    compile group: 'com.atlassian.oai', name: 'swagger-request-validator-core', version: '2.0.0'
+    compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.12'
+    compile group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.12'
+}
+createDockerfile.dependsOn(syncJar)
+assemble.dependsOn(buildImage)
+buildImage.dependsOn(createDockerfile)
+createDockerfile.dependsOn(jar)
