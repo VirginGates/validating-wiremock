@@ -160,8 +160,11 @@ class OpenApiValidationListener implements RequestListener {
     @Override
     public void requestReceived(final Request request, final Response response) {
         try {
-            report = report.merge(validator.validate(WireMockRequest.of(request), WireMockResponse.of(response)));
-            assertValidationPassed();
+            // we exclude OPTIONS otherwise we need to provide CORS headers all over Swagger file..
+            if (!request.getMethod().equals(RequestMethod.OPTIONS)) {
+                report = report.merge(validator.validate(WireMockRequest.of(request), WireMockResponse.of(response)));
+                assertValidationPassed();
+            }
         } catch (final Exception e) {
             //log.error("Exception occurred while validating request", e);
             throw e;
