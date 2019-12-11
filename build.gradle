@@ -24,14 +24,14 @@ idea {
 }
 
 group 'com.virgingates.tools'
-version '1.0'
+version '1.1'
 
 task createDockerfile(type: Dockerfile) {
     destFile = project.file('build/docker/Dockerfile')
-    from 'openjdk:8-jre-alpine'
+    from 'openjdk:11-jre'
     label(["maintainer":"Ameer Gaafar <ameer.gaafar@virgingates.com>"])
     copyFile jar.archiveName, '/app/'+jar.baseName+".jar"
-    entryPoint 'java','-jar', '/app/'+jar.baseName+".jar","--local-response-templating" 
+    entryPoint 'java','-jar', '/app/'+jar.baseName+".jar","--local-response-templating"
     workingDir "/app"
     exposePort 8080
 }
@@ -65,8 +65,8 @@ jar {
 
 
 dependencies {
-    compile group: 'com.github.tomakehurst', name: 'wiremock-standalone' , version :'2.19.0'
-    compile group: 'com.atlassian.oai', name: 'swagger-request-validator-core', version: '2.0.0'
+    compile group: 'com.github.tomakehurst', name: 'wiremock-standalone' , version :'2.25.1'
+    compile group: 'com.atlassian.oai', name: 'swagger-request-validator-core', version: '2.4.5'
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.12'
     compile group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.12'
 }
