@@ -24,7 +24,7 @@ idea {
 }
 
 group 'com.virgingates.tools'
-version '1.2'
+version '1.1'
 
 task createDockerfile(type: Dockerfile) {
     destFile = project.file('build/docker/Dockerfile')
