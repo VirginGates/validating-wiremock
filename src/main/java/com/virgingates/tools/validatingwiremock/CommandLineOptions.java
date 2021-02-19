@@ -178,18 +178,5 @@ public class CommandLineOptions extends com.github.tomakehurst.wiremock.standalo
         return (String) optionSet.valueOf(OPENAPI_FILE);
     }
 
-    @Override
-    public FileSource filesRoot() {
-        return fileSource;
-    }
 
-    @Override
-    public MappingsLoader mappingsLoader() {
-        return mappingsSource;
-    }
-
-    @Override
-    public MappingsSaver mappingsSaver() {
-        return mappingsSource;
-    }
 }
