@@ -5,8 +5,16 @@ plugins {
     id 'java'
     id 'application'
     id "org.jetbrains.gradle.plugin.idea-ext" version "0.4.2"
-    id 'com.bmuschko.docker-remote-api' version '3.6.2'
+    id 'com.bmuschko.docker-remote-api' version '6.7.0'
 }
+
+import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStartContainer
+import com.bmuschko.gradle.docker.tasks.container.DockerStopContainer
+import com.bmuschko.gradle.docker.tasks.container.extras.DockerWaitHealthyContainer
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.image.DockerPullImage
+import com.bmuschko.gradle.docker.tasks.image.Dockerfile
 
 repositories {
     jcenter()
@@ -31,20 +39,33 @@ task createDockerfile(type: Dockerfile) {
     from 'openjdk:11-jre'
     label(["maintainer":"Ameer Gaafar <ameer.gaafar@virgingates.com>"])
     copyFile jar.archiveName, '/app/'+jar.baseName+".jar"
-    entryPoint 'java','-jar', '/app/'+jar.baseName+".jar","--local-response-templating"
+    entryPoint 'java',"-XX:MaxRAMPercentage=75","-XX:MinRAMPercentage=75","-XX:InitialRAMPercentage=75",'-jar', '/app/'+jar.baseName+".jar","--local-response-templating"
     workingDir "/app"
     exposePort 8080
 }
 
 task buildImage(type: DockerBuildImage) {
+
+    def repoName = "gcr.io/vgsurvv/" + jar.baseName.toLowerCase()
     dependsOn createDockerfile
-    inputDir = createDockerfile.destFile.parentFile
-    tag = "virgingates/"+jar.baseName.toLowerCase()+":"+jar.version
+    inputDir = createDockerfile.destFile.get().asFile.parentFile
+    images.add("${repoName}:latest")
+    images.add("${repoName}:optmem")
+}
+
+
+task publish(type: Exec) {
+
+    def repoName = "gcr.io/vgsurvv/" + jar.baseName.toLowerCase()
+
+    dependsOn buildImage
+
+    commandLine 'docker', "push", "${repoName}"
 }
 
 task syncJar(type: Sync) {
     from jar.archivePath
-    into createDockerfile.destFile.parentFile
+    into createDockerfile.destFile.get().asFile.parentFile
 }
 
 mainClassName = 'com.virgingates.tools.validatingwiremock.WireMockServerRunner'
