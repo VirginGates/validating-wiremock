@@ -1,47 +1,18 @@
 package com.virgingates.tools.validatingwiremock;
-import com.github.tomakehurst.wiremock.common.*;
-import com.github.tomakehurst.wiremock.core.MappingsSaver;
-import com.github.tomakehurst.wiremock.core.Options;
+
 import com.github.tomakehurst.wiremock.core.WireMockApp;
-import com.github.tomakehurst.wiremock.extension.Extension;
-import com.github.tomakehurst.wiremock.extension.ExtensionLoader;
-import com.github.tomakehurst.wiremock.extension.ResponseDefinitionTransformer;
-import com.github.tomakehurst.wiremock.extension.responsetemplating.ResponseTemplateTransformer;
-import com.github.tomakehurst.wiremock.http.CaseInsensitiveKey;
-import com.github.tomakehurst.wiremock.http.HttpServerFactory;
-import com.github.tomakehurst.wiremock.http.ThreadPoolFactory;
-import com.github.tomakehurst.wiremock.http.trafficlistener.ConsoleNotifyingWiremockNetworkTrafficListener;
-import com.github.tomakehurst.wiremock.http.trafficlistener.DoNothingWiremockNetworkTrafficListener;
-import com.github.tomakehurst.wiremock.http.trafficlistener.WiremockNetworkTrafficListener;
-import com.github.tomakehurst.wiremock.jetty9.QueuedThreadPoolFactory;
-import com.github.tomakehurst.wiremock.security.Authenticator;
-import com.github.tomakehurst.wiremock.security.BasicAuthenticator;
-import com.github.tomakehurst.wiremock.security.NoAuthenticator;
-import com.github.tomakehurst.wiremock.standalone.JsonFileMappingsSource;
-import com.github.tomakehurst.wiremock.standalone.MappingsLoader;
-import com.github.tomakehurst.wiremock.standalone.MappingsSource;
-import com.github.tomakehurst.wiremock.verification.notmatched.NotMatchedRenderer;
-import com.github.tomakehurst.wiremock.verification.notmatched.PlainTextStubNotMatchedRenderer;
-import com.google.common.base.Optional;
+import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
-import com.google.common.collect.*;
 import com.google.common.io.Resources;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.net.URI;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.Arrays;
 
-import static com.github.tomakehurst.wiremock.common.Exceptions.throwUnchecked;
-import static com.github.tomakehurst.wiremock.common.ProxySettings.NO_PROXY;
 import static com.github.tomakehurst.wiremock.core.WireMockApp.MAPPINGS_ROOT;
-import static com.github.tomakehurst.wiremock.extension.ExtensionLoader.valueAssignableFrom;
-import static com.github.tomakehurst.wiremock.http.CaseInsensitiveKey.TO_CASE_INSENSITIVE_KEYS;
-import static java.lang.System.out;
 
 public class CommandLineOptions extends com.github.tomakehurst.wiremock.standalone.CommandLineOptions {
 
@@ -81,15 +52,12 @@ public class CommandLineOptions extends com.github.tomakehurst.wiremock.standalo
 
     private static final String OPENAPI_FILE = "openapi-file";
 
-
     private final OptionSet optionSet;
-    private final FileSource fileSource;
-    private final MappingsSource mappingsSource;
-
     private String helpText;
-    private Optional<Integer> resultingPort;
 
     public CommandLineOptions(String... args) {
+        super(getWireMockArgs(args));
+
         OptionParser optionParser = new OptionParser();
         optionParser.accepts(PORT, "The port number for the server to listen on (default: 8080). 0 for dynamic port selection.").withRequiredArg();
         optionParser.accepts(HTTPS_PORT, "If this option is present WireMock will enable HTTPS on the specified port").withRequiredArg();
@@ -129,23 +97,46 @@ public class CommandLineOptions extends com.github.tomakehurst.wiremock.standalo
         optionParser.accepts(HELP, "Print this message");
 
         optionSet = optionParser.parse(args);
-        validate();
         captureHelpTextIfRequested(optionParser);
-
-        fileSource = new SingleRootFileSource((String) optionSet.valueOf(ROOT_DIR));
-        mappingsSource = new JsonFileMappingsSource(fileSource.child(MAPPINGS_ROOT));
-
-        resultingPort = Optional.absent();
     }
 
-    private void validate() {
-        if (optionSet.has(HTTPS_KEYSTORE) && !optionSet.has(HTTPS_PORT)) {
-            throw new IllegalArgumentException("HTTPS port number must be specified if specifying the keystore path");
-        }
+    /**
+     * Filters out option "--openapi-file" and next argument if the option didn't have "=".
+     * So, it works for "--openapi-file ./file.json" and "--openapi-file=./file.json".
+     * @param args all CLI arguments
+     * @return arguments without custom ones, i.e., openapi-file
+     */
+    private static String[] getWireMockArgs(String[] args) {
+        Predicate<String> isWireMockOptionOrArgument = new Predicate<String>() {
+            private static final String OPENAPI_FILE_OPTION = "--" + OPENAPI_FILE;
 
-        if (optionSet.has(RECORD_MAPPINGS) && optionSet.has(DISABLE_REQUEST_JOURNAL)) {
-            throw new IllegalArgumentException("Request journal must be enabled to record stubs");
-        }
+            private boolean previousWasOpenapiFileWithoutArgument = false;
+
+            @Override
+            public boolean apply(@Nullable String s) {
+                if (s == null) {
+                    return false;
+                }
+
+                boolean shouldMatch = true;
+                if (previousWasOpenapiFileWithoutArgument) {
+                    previousWasOpenapiFileWithoutArgument = false;
+                    shouldMatch = false;
+                } else if (s.equals(OPENAPI_FILE_OPTION)) {
+                    shouldMatch = false;
+                    previousWasOpenapiFileWithoutArgument = true;
+                } else if (s.startsWith(OPENAPI_FILE_OPTION + "=")) {
+                    shouldMatch = false;
+                    previousWasOpenapiFileWithoutArgument = false;
+                }
+
+                return shouldMatch;
+            }
+        };
+
+        return Arrays.stream(args)
+                .filter(isWireMockOptionOrArgument)
+                .toArray(String[]::new);
     }
 
     private void captureHelpTextIfRequested(OptionParser optionParser) {
@@ -159,6 +150,10 @@ public class CommandLineOptions extends com.github.tomakehurst.wiremock.standalo
 
             helpText = out.toString();
         }
+    }
+
+    public String helpText() {
+        return helpText;
     }
 
     @Override
